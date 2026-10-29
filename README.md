@@ -29,6 +29,27 @@ Outputs: `swarm_gaze.mp4` (the moving piece), `pigment.png` (last frame), `atten
 2. **Lingering.** A swarm moves over the map using a simplified version of Dispersive Flies Optimisation (DFO). Flies stay longer where the image stands out, then lose interest (an inhibition map) and move on. Where they linger is what the machine has "noticed". A small panel shows this as a heat map.
 3. **Pigment.** Each fly releases particles that carry the colour it is looking at. Near a line, particles flow along the direction of that line; in empty space, a gentle wind carries them. They fade over time, so each artwork leaves its own moving trace of the swarm's gaze. (In the Python version; the browser version still uses only the wind.)
 
+## Machine Feels: a very simple prototype
+
+> If a machine learns what people feel in front of art, what would it draw?
+
+`machine_feels.py` is the simplest version of that idea. It does not copy the artwork; it draws its own picture.
+
+1. **Look**: reads a few qualities of the artwork (warmth, brightness, colour, line energy, contrast) and its palette.
+2. **Feel**: guesses which of the 9 ArtEmis emotions the work evokes. Until it is trained on real people's responses, this step uses a small hand-made starter rule, clearly labelled as *not human data*.
+3. **Draw**: a flock of birds (boids) draws an original picture. The feeling decides how they fly (speed, closeness, restlessness) and how their colours shift; the artwork only decides where they start and which palette they borrow.
+4. **Learn**: `python machine_feels.py learn --artemis artemis.csv --images wikiart/` fits the feel step on ArtEmis, so the machine's "feelings" come from people. Not run yet.
+
+```bash
+python machine_feels.py look-and-draw assets/drawing.jpg
+```
+
+Outputs in `out_feels/`: `machine_feelings.png`, `machine_drawing.png`, `machine_drawing.mp4`, `run.json`.
+
+The machine does not feel anything. Whatever it "feels" is borrowed from us.
+
+Reference: Achlioptas, P. et al. (2021). *ArtEmis: Affective Language for Visual Art*. CVPR.
+
 ## Bee Gaze: learning from an artist
 
 `bee_gaze.py` adds learning and a second swarm from nature.
