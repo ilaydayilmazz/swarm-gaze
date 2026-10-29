@@ -6,7 +6,7 @@ A machine looks at real artworks across history, reads how the human figure chan
 
 ## How it works
 
-1. **Collect**: downloads openly licensed artworks from Wikimedia Commons, age by age: prehistoric, Egypt, Greece, Roman Egypt, Byzantine, Gothic, Renaissance, Baroque, Impressionism, Van Gogh, Modigliani. Sources and licences go into `credits.csv`.
+1. **Collect**: downloads openly licensed artworks age by age: prehistoric, Egypt, Greece, Roman Egypt, Byzantine, Gothic, Renaissance, Baroque, Impressionism, Van Gogh, Modigliani. The Met Open Access (CC0) is tried first where it has the age; Wikimedia Commons (reusable licences only) fills the rest. The output says why anything was skipped. Sources and licences go into `credits.csv`.
 2. **Look**: a vision model (CLIP) turns each work into a vector.
 3. **Read**: how strongly each work matches five ways of showing a person (symbolic, lifelike, emotional, fragmented, dissolving into light), plotted over time.
 4. **Atlas**: all works on one map (UMAP); near means "looks alike to the machine".

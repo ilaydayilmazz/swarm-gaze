@@ -5,9 +5,10 @@ A machine looks at real artworks from the first human drawings to the
 20th century, reads how the depiction of people changes over time, and
 makes its own piece from them.
 
-  1. collect   find and download openly licensed artworks from Wikimedia Commons,
-               age by age from cave paintings to Modigliani (only reusable
-               licences). Every file's source, author and licence go into credits.csv.
+  1. collect   find and download openly licensed artworks, age by age from cave
+               paintings to Modigliani: The Met Open Access (CC0) where it has the
+               age, Wikimedia Commons (reusable licences only) for the rest.
+               Every file's source, author and licence go into credits.csv.
   2. look      a vision model (CLIP) turns each work into a vector the
                machine can compare
   3. read      how strongly each work matches a few descriptions of how a
@@ -30,22 +31,24 @@ from PIL import Image
 UA = {"User-Agent": "ThroughTime/0.2 (student art project; https://github.com/ilaydayilmazz/swarm-gaze)"}
 COMMONS = "https://commons.wikimedia.org/w/api.php"
 
-# Ages to collect, oldest first: (label, typical year, Wikimedia Commons search words).
-# All from Wikimedia Commons, which works from Colab; only reusable licences are kept.
+# Ages to collect, oldest first: (label, typical year, Wikimedia Commons search words, Met search or None).
+# The Met (CC0 Open Access) is tried first where it has the age; Wikimedia Commons fills the rest.
+# Met department ids: 10 Egyptian Art, 13 Greek and Roman Art, 17 Medieval Art, 11 European Paintings.
 AGES = [
-    ("Prehistoric", -15000, "cave painting prehistoric"),
-    ("Ancient Egypt", -1300, "ancient Egyptian tomb painting"),
-    ("Ancient Greece", -500, "ancient Greek vase painting figure"),
-    ("Roman Egypt", 150, "Fayum mummy portrait"),
-    ("Byzantine", 1100, "Byzantine icon painting"),
-    ("Gothic", 1310, "Giotto fresco"),
-    ("Renaissance", 1500, "Renaissance portrait painting"),
-    ("Baroque", 1650, "Rembrandt portrait painting"),
-    ("Impressionism", 1875, "Impressionist portrait painting"),
-    ("Van Gogh", 1888, "Vincent van Gogh painting"),
-    ("Early modern", 1915, "Amedeo Modigliani portrait"),
+    ("Prehistoric", -15000, "cave painting prehistoric", None),
+    ("Ancient Egypt", -1300, "ancient Egyptian tomb painting", {"q": "figure", "departmentId": 10}),
+    ("Ancient Greece", -500, "ancient Greek vase painting figure", {"q": "figure", "departmentId": 13, "dateBegin": -800, "dateEnd": -100}),
+    ("Roman Egypt", 150, "Fayum mummy portrait", {"q": "mummy portrait", "departmentId": 10}),
+    ("Byzantine", 1100, "Byzantine icon painting", {"q": "icon", "departmentId": 17}),
+    ("Gothic", 1310, "Giotto fresco", {"q": "Madonna", "departmentId": 11, "dateBegin": 1250, "dateEnd": 1400}),
+    ("Renaissance", 1500, "Renaissance portrait painting", {"q": "portrait", "departmentId": 11, "dateBegin": 1450, "dateEnd": 1580}),
+    ("Baroque", 1650, "Rembrandt portrait painting", {"q": "portrait", "departmentId": 11, "dateBegin": 1600, "dateEnd": 1720}),
+    ("Impressionism", 1875, "Impressionist portrait painting", {"q": "portrait", "departmentId": 11, "dateBegin": 1860, "dateEnd": 1895}),
+    ("Van Gogh", 1888, "Vincent van Gogh painting", {"q": "Vincent van Gogh", "departmentId": 11, "artist": "gogh"}),
+    ("Early modern", 1915, "Amedeo Modigliani portrait", None),
 ]
 REUSABLE = ("public domain", "pd", "cc0", "cc by", "cc-by")
+MET = "https://collectionapi.metmuseum.org/public/collection/v1"
 
 
 def _strip(html):
@@ -64,49 +67,119 @@ def _year(meta, fallback):
     return fallback
 
 
-def collect(out="data/time", per_age=10, pause=0.2):
-    """Download openly licensed artworks for every age, oldest first. Returns the number saved."""
+def _met(spec, label, year, want, out, s, pause):
+    """Up to `want` public-domain works from The Met for one age. Prints why anything was skipped."""
+    params = {"q": spec["q"], "hasImages": "true", "departmentId": spec["departmentId"]}
+    if "dateBegin" in spec:
+        params.update(dateBegin=spec["dateBegin"], dateEnd=spec["dateEnd"])
+    try:
+        r = s.get(f"{MET}/search", params=params, headers=UA, timeout=60)
+    except Exception as e:
+        print(f"  Met: search could not connect ({e.__class__.__name__})")
+        return []
+    if r.status_code != 200 or "json" not in r.headers.get("content-type", ""):
+        print(f"  Met: search answered {r.status_code} ({r.headers.get('content-type', '?')}), "
+              f"likely blocked from this server: {r.text[:120]!r}")
+        return []
+    ids = (r.json() or {}).get("objectIDs") or []
+    rows, why = [], {}
+    for oid in ids[:200]:
+        if len(rows) >= want:
+            break
+        time.sleep(pause)
+        try:
+            o = s.get(f"{MET}/objects/{oid}", headers=UA, timeout=60)
+            if o.status_code != 200 or "json" not in o.headers.get("content-type", ""):
+                why[f"object request {o.status_code}"] = why.get(f"object request {o.status_code}", 0) + 1
+                if o.status_code in (403, 429):
+                    break  # blocked or rate limited: stop asking
+                continue
+            o = o.json()
+        except Exception as e:
+            why[e.__class__.__name__] = why.get(e.__class__.__name__, 0) + 1
+            continue
+        url = o.get("primaryImageSmall")
+        if not o.get("isPublicDomain"):
+            why["not public domain"] = why.get("not public domain", 0) + 1
+            continue
+        if not url:
+            why["no image"] = why.get("no image", 0) + 1
+            continue
+        if spec.get("artist") and spec["artist"] not in (o.get("artistDisplayName") or "").lower():
+            why["other artist"] = why.get("other artist", 0) + 1
+            continue
+        name = f"met_{oid}.jpg"
+        try:
+            img = s.get(url, headers=UA, timeout=60)
+            img.raise_for_status()
+            (out / name).write_bytes(img.content)
+        except Exception:
+            why["image download"] = why.get("image download", 0) + 1
+            continue
+        y = o.get("objectBeginDate")
+        rows.append({"file": name, "title": o.get("title"), "year": y if isinstance(y, int) and y != 0 else year,
+                     "period": label, "author": o.get("artistDisplayName") or o.get("culture") or "",
+                     "licence": "CC0 (The Met Open Access)", "source": o.get("objectURL")})
+    print(f"  Met: {len(ids)} found, {len(rows)} saved" + (f", skipped: {why}" if why else ""))
+    return rows
+
+
+def _commons(words, label, year, want, out, s, pause):
+    """Up to `want` openly licensed works from Wikimedia Commons for one age."""
+    q = {"action": "query", "format": "json", "generator": "search", "gsrnamespace": 6,
+         "gsrsearch": f"{words} filetype:bitmap", "gsrlimit": 60,
+         "prop": "imageinfo", "iiprop": "url|extmetadata", "iiurlwidth": 900}
+    try:
+        pages = s.get(COMMONS, params=q, headers=UA, timeout=60).json().get("query", {}).get("pages", {})
+    except Exception as e:
+        print(f"  Commons: search failed ({e})")
+        return []
+    rows, skipped = [], 0
+    for p in sorted(pages.values(), key=lambda p: p.get("index", 0)):
+        if len(rows) >= want:
+            break
+        info = (p.get("imageinfo") or [{}])[0]
+        meta = info.get("extmetadata", {})
+        lic = meta.get("LicenseShortName", {}).get("value", "")
+        url = info.get("thumburl") or info.get("url")
+        if not url or not any(k in lic.lower() for k in REUSABLE):
+            skipped += 1
+            continue
+        name = f"commons_{p['pageid']}.jpg"
+        try:
+            img = s.get(url, headers=UA, timeout=60)
+            img.raise_for_status()
+            (out / name).write_bytes(img.content)
+        except Exception:
+            skipped += 1
+            continue
+        rows.append({"file": name, "title": p.get("title", "").replace("File:", ""), "year": _year(meta, year),
+                     "period": label, "author": _strip(meta.get("Artist", {}).get("value", ""))[:120],
+                     "licence": lic, "source": info.get("descriptionurl", "")})
+        time.sleep(pause)
+    print(f"  Commons: {len(rows)} saved, {skipped} skipped (licence or download)")
+    return rows
+
+
+def collect(out="data/time", per_age=10, use_met=True, pause=0.2):
+    """Download artworks for every age, oldest first: The Met where it has the age, Wikimedia Commons for the rest."""
     import requests
 
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     s = requests.Session()
-    rows = []
-    for label, year, words in AGES:
-        q = {"action": "query", "format": "json", "generator": "search", "gsrnamespace": 6,
-             "gsrsearch": f"{words} filetype:bitmap", "gsrlimit": 60,
-             "prop": "imageinfo", "iiprop": "url|extmetadata", "iiurlwidth": 900}
-        try:
-            r = s.get(COMMONS, params=q, headers=UA, timeout=60)
-            pages = r.json().get("query", {}).get("pages", {})
-        except Exception as e:
-            print(f"{label}: search failed ({e})")
-            continue
-        n = skipped = 0
-        for p in sorted(pages.values(), key=lambda p: p.get("index", 0)):
-            if n >= per_age:
-                break
-            info = (p.get("imageinfo") or [{}])[0]
-            meta = info.get("extmetadata", {})
-            lic = meta.get("LicenseShortName", {}).get("value", "")
-            url = info.get("thumburl") or info.get("url")
-            if not url or not any(k in lic.lower() for k in REUSABLE):
-                skipped += 1
-                continue
-            name = f"{label.lower().replace(' ', '_')}_{p['pageid']}.jpg"
-            try:
-                img = s.get(url, headers=UA, timeout=60)
-                img.raise_for_status()
-                (out / name).write_bytes(img.content)
-            except Exception:
-                skipped += 1
-                continue
-            rows.append({"file": name, "title": p.get("title", "").replace("File:", ""), "year": _year(meta, year),
-                         "period": label, "author": _strip(meta.get("Artist", {}).get("value", ""))[:120],
-                         "licence": lic, "source": info.get("descriptionurl", "")})
-            n += 1
-            time.sleep(pause)
-        print(f"{label:15s} {n:3d} saved, {skipped} skipped (licence or download)")
+    rows, met_ok = [], use_met
+    for label, year, words, met in AGES:
+        print(label)
+        got = []
+        if met and met_ok:
+            got = _met(met, label, year, per_age, out, s, pause)
+            if not got and label == "Ancient Egypt":
+                print("  The Met gave nothing for the first age; using Wikimedia Commons for the rest.")
+                met_ok = False
+        if len(got) < per_age:
+            got += _commons(words, label, year, per_age - len(got), out, s, pause)
+        rows += got
 
     rows.sort(key=lambda r: r["year"])
     with open(out / "credits.csv", "w", newline="", encoding="utf-8") as f:
