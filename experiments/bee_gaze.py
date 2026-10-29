@@ -343,7 +343,7 @@ def main():
     c.add_argument("--out", default="data/collection")
     r = sub.add_parser("run", help="learn, look, forage and paint")
     r.add_argument("--collection", default="data/collection")
-    r.add_argument("--target", default=str(Path(__file__).parent / "assets" / "drawing.jpg"))
+    r.add_argument("--target", default=str(Path(__file__).parent.parent / "assets" / "drawing.jpg"))
     r.add_argument("--out", default="out")
     r.add_argument("--cycles", type=int, default=500)
     r.add_argument("--sources", type=int, default=40)

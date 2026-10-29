@@ -253,7 +253,7 @@ def main():
     ap = argparse.ArgumentParser(description="Machine Feels: look, feel and draw")
     sub = ap.add_subparsers(dest="cmd", required=True)
     d = sub.add_parser("look-and-draw")
-    d.add_argument("image", nargs="?", default=str(Path(__file__).parent / "assets" / "drawing.jpg"))
+    d.add_argument("image", nargs="?", default=str(Path(__file__).parent.parent / "assets" / "drawing.jpg"))
     d.add_argument("--out", default="out_feels")
     d.add_argument("--seed", type=int)
     l = sub.add_parser("learn")

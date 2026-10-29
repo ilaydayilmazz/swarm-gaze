@@ -5,11 +5,9 @@ A machine looks at real artworks from the first human drawings to the
 20th century, reads how the depiction of people changes over time, and
 makes its own piece from them.
 
-  1. collect   find and download openly licensed artworks, oldest to newest:
-               - Wikimedia Commons: cave paintings (only files whose licence allows reuse)
-               - The Met Open Access (CC0): Egypt, Greece, medieval, Renaissance, ...
-               - Art Institute of Chicago (CC0): Vincent van Gogh and others
-               Every file's source, author and licence go into credits.csv.
+  1. collect   find and download openly licensed artworks from Wikimedia Commons,
+               age by age from cave paintings to Modigliani (only reusable
+               licences). Every file's source, author and licence go into credits.csv.
   2. look      a vision model (CLIP) turns each work into a vector the
                machine can compare
   3. read      how strongly each work matches a few descriptions of how a
@@ -29,145 +27,94 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-UA = {"User-Agent": "ThroughTime/0.1 (student art project; contact via GitHub ilaydayilmazz)"}
+UA = {"User-Agent": "ThroughTime/0.2 (student art project; https://github.com/ilaydayilmazz/swarm-gaze)"}
+COMMONS = "https://commons.wikimedia.org/w/api.php"
 
-# Periods to collect from The Met, oldest first: (label, start year, end year, search words)
-MET_PERIODS = [
-    ("Ancient Egypt", -3000, -500, "figure"),
-    ("Ancient Greece and Rome", -700, 300, "figure"),
-    ("Medieval", 500, 1400, "saint"),
-    ("Renaissance", 1400, 1600, "portrait"),
-    ("Baroque", 1600, 1750, "portrait"),
-    ("18th-19th century", 1750, 1880, "portrait"),
+# Ages to collect, oldest first: (label, typical year, Wikimedia Commons search words).
+# All from Wikimedia Commons, which works from Colab; only reusable licences are kept.
+AGES = [
+    ("Prehistoric", -15000, "cave painting prehistoric"),
+    ("Ancient Egypt", -1300, "ancient Egyptian tomb painting"),
+    ("Ancient Greece", -500, "ancient Greek vase painting figure"),
+    ("Roman Egypt", 150, "Fayum mummy portrait"),
+    ("Byzantine", 1100, "Byzantine icon painting"),
+    ("Gothic", 1310, "Giotto fresco"),
+    ("Renaissance", 1500, "Renaissance portrait painting"),
+    ("Baroque", 1650, "Rembrandt portrait painting"),
+    ("Impressionism", 1875, "Impressionist portrait painting"),
+    ("Van Gogh", 1888, "Vincent van Gogh painting"),
+    ("Early modern", 1915, "Amedeo Modigliani portrait"),
 ]
-REUSABLE = ("public domain", "pd", "cc0", "cc by", "cc-by", "cc by-sa", "cc-by-sa")
+REUSABLE = ("public domain", "pd", "cc0", "cc by", "cc-by")
 
 
-def _save(url, path, session):
-    r = session.get(url, headers=UA, timeout=60)
-    r.raise_for_status()
-    Path(path).write_bytes(r.content)
+def _strip(html):
+    """Remove HTML tags from a Commons metadata field."""
+    import re
+    return re.sub(r"<[^>]+>", "", html or "").strip()
 
 
-def collect(out="data/time", per_period=15, cave=15, artists=("Vincent van Gogh",), per_artist=15, pause=0.15):
-    """Download artworks with their metadata. Returns the number saved."""
+def _year(meta, fallback):
+    """The work's year if Commons gives one (between -40000 and 1930), else the age's typical year."""
+    import re
+    text = _strip(meta.get("DateTimeOriginal", {}).get("value", ""))
+    m = re.search(r"(?<!\d)(1[0-9]{3})(?!\d)", text)
+    if m and 400 <= int(m.group(1)) <= 1930 and fallback > 0:
+        return int(m.group(1))
+    return fallback
+
+
+def collect(out="data/time", per_age=10, pause=0.2):
+    """Download openly licensed artworks for every age, oldest first. Returns the number saved."""
     import requests
 
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     s = requests.Session()
     rows = []
-
-    def add(file, title, year, period, author, licence, source):
-        rows.append({"file": file, "title": title, "year": year, "period": period,
-                     "author": author, "licence": licence, "source": source})
-        print(f"  {period:24s} {year:>6}  {str(title)[:60]}")
-
-    # 1. Cave paintings from Wikimedia Commons, reusable licences only
-    print("Cave paintings (Wikimedia Commons)")
-    api = "https://commons.wikimedia.org/w/api.php"
-    q = {"action": "query", "format": "json", "generator": "search", "gsrnamespace": 6,
-         "gsrsearch": "cave painting prehistoric filetype:bitmap", "gsrlimit": 50,
-         "prop": "imageinfo", "iiprop": "url|extmetadata", "iiurlwidth": 900}
-    try:
-        pages = s.get(api, params=q, headers=UA, timeout=60).json().get("query", {}).get("pages", {})
-    except Exception as e:
-        print("  Commons search failed:", e)
-        pages = {}
-    n = 0
-    for p in pages.values():
-        if n >= cave:
-            break
-        info = (p.get("imageinfo") or [{}])[0]
-        meta = info.get("extmetadata", {})
-        lic = (meta.get("LicenseShortName", {}).get("value") or "").lower()
-        if not any(k in lic for k in REUSABLE):
-            continue
-        url = info.get("thumburl") or info.get("url")
-        if not url:
-            continue
-        name = f"cave_{p['pageid']}.jpg"
+    for label, year, words in AGES:
+        q = {"action": "query", "format": "json", "generator": "search", "gsrnamespace": 6,
+             "gsrsearch": f"{words} filetype:bitmap", "gsrlimit": 60,
+             "prop": "imageinfo", "iiprop": "url|extmetadata", "iiurlwidth": 900}
         try:
-            _save(url, out / name, s)
-        except Exception:
-            continue
-        author = Image_strip(meta.get("Artist", {}).get("value", ""))
-        add(name, p.get("title", "").replace("File:", ""), -15000, "Prehistoric (cave)", author,
-            meta.get("LicenseShortName", {}).get("value", ""), info.get("descriptionurl", ""))
-        n += 1
-        time.sleep(pause)
-
-    # 2. The Met, period by period (CC0)
-    met = "https://collectionapi.metmuseum.org/public/collection/v1"
-    for label, a, b, words in MET_PERIODS:
-        print(label, "(The Met)")
-        try:
-            ids = s.get(f"{met}/search", params={"q": words, "hasImages": "true", "dateBegin": a, "dateEnd": b},
-                        headers=UA, timeout=60).json().get("objectIDs") or []
+            r = s.get(COMMONS, params=q, headers=UA, timeout=60)
+            pages = r.json().get("query", {}).get("pages", {})
         except Exception as e:
-            print("  search failed:", e)
+            print(f"{label}: search failed ({e})")
             continue
-        n = 0
-        for oid in ids:
-            if n >= per_period:
+        n = skipped = 0
+        for p in sorted(pages.values(), key=lambda p: p.get("index", 0)):
+            if n >= per_age:
                 break
+            info = (p.get("imageinfo") or [{}])[0]
+            meta = info.get("extmetadata", {})
+            lic = meta.get("LicenseShortName", {}).get("value", "")
+            url = info.get("thumburl") or info.get("url")
+            if not url or not any(k in lic.lower() for k in REUSABLE):
+                skipped += 1
+                continue
+            name = f"{label.lower().replace(' ', '_')}_{p['pageid']}.jpg"
             try:
-                o = s.get(f"{met}/objects/{oid}", headers=UA, timeout=60).json()
+                img = s.get(url, headers=UA, timeout=60)
+                img.raise_for_status()
+                (out / name).write_bytes(img.content)
             except Exception:
+                skipped += 1
                 continue
-            time.sleep(pause)
-            url = o.get("primaryImageSmall")
-            if not o.get("isPublicDomain") or not url:
-                continue
-            name = f"met_{oid}.jpg"
-            try:
-                _save(url, out / name, s)
-            except Exception:
-                continue
-            add(name, o.get("title"), o.get("objectBeginDate"), label, o.get("artistDisplayName") or o.get("culture") or "",
-                "CC0 (The Met Open Access)", o.get("objectURL"))
-            n += 1
-
-    # 3. Artists from the Art Institute of Chicago (CC0 images)
-    aic = "https://api.artic.edu/api/v1/artworks/search"
-    for artist in artists:
-        print(artist, "(Art Institute of Chicago)")
-        try:
-            data = s.get(aic, params={"q": artist, "limit": 60,
-                                      "fields": "id,title,date_start,artist_title,image_id,is_public_domain"},
-                         headers=UA, timeout=60).json().get("data", [])
-        except Exception as e:
-            print("  search failed:", e)
-            data = []
-        n = 0
-        for d in data:
-            if n >= per_artist:
-                break
-            if not d.get("is_public_domain") or not d.get("image_id") or artist.split()[-1].lower() not in (d.get("artist_title") or "").lower():
-                continue
-            name = f"aic_{d['id']}.jpg"
-            try:
-                _save(f"https://www.artic.edu/iiif/2/{d['image_id']}/full/843,/0/default.jpg", out / name, s)
-            except Exception:
-                continue
-            add(name, d.get("title"), d.get("date_start"), artist, d.get("artist_title"),
-                "CC0 (Art Institute of Chicago)", f"https://www.artic.edu/artworks/{d['id']}")
+            rows.append({"file": name, "title": p.get("title", "").replace("File:", ""), "year": _year(meta, year),
+                         "period": label, "author": _strip(meta.get("Artist", {}).get("value", ""))[:120],
+                         "licence": lic, "source": info.get("descriptionurl", "")})
             n += 1
             time.sleep(pause)
+        print(f"{label:15s} {n:3d} saved, {skipped} skipped (licence or download)")
 
-    rows.sort(key=lambda r: (r["year"] if isinstance(r["year"], (int, float)) else 0))
+    rows.sort(key=lambda r: r["year"])
     with open(out / "credits.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=["file", "title", "year", "period", "author", "licence", "source"])
         w.writeheader()
         w.writerows(rows)
     print(f"Saved {len(rows)} works and credits.csv in {out}")
     return len(rows)
-
-
-def Image_strip(html):
-    """Remove HTML tags from a Commons metadata field."""
-    import re
-    return re.sub(r"<[^>]+>", "", html or "").strip()
 
 
 def load_collection(folder="data/time"):
@@ -255,7 +202,7 @@ def atlas(rows, vecs, path="out_time/atlas.png", thumb=48):
 # 5. Journey: the machine's own piece (numpy + Pillow only)
 # ---------------------------------------------------------------------------
 
-def journey(rows, out="out_time", seconds_per_work=1.6, fps=30, size=(960, 640), flies=80, seed=1):
+def journey(rows, out="out_time", seconds_per_work=2.0, fps=30, size=(960, 640), flies=80, seed=1):
     """
     The machine's gaze travels through the works in time order. On each work a
     DFO swarm looks for what stands out; light carrying that work's colours
@@ -279,7 +226,7 @@ def journey(rows, out="out_time", seconds_per_work=1.6, fps=30, size=(960, 640),
         swarm = sg.Swarm(sg.salience_map(rgb), flies, 0.03)
         pig = sg.Pigment(rgb, flow=1.4, decay=0.955)
         if canvas is not None:
-            pig.canvas = canvas
+            pig.canvas = canvas * 0.45  # the last age fades as the next one begins
         for f in range(per):
             swarm.step()
             pig.emit(swarm)
