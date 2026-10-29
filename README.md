@@ -29,6 +29,18 @@ Outputs: `swarm_gaze.mp4` (the moving piece), `pigment.png` (last frame), `atten
 2. **Lingering.** A swarm moves over the map using a simplified version of Dispersive Flies Optimisation (DFO). Flies stay longer where the image stands out, then lose interest (an inhibition map) and move on. Where they linger is what the machine has "noticed". A small panel shows this as a heat map.
 3. **Pigment.** Each fly releases particles that carry the colour it is looking at. Near a line, particles flow along the direction of that line; in empty space, a gentle wind carries them. They fade over time, so each artwork leaves its own moving trace of the swarm's gaze. (In the Python version; the browser version still uses only the wind.)
 
+## Through Time: from the first human drawings to Van Gogh
+
+`through_time.py` and `through_time_colab.ipynb` let the machine look at real artworks across history instead of drawings from memory.
+
+1. **Collect**: downloads openly licensed works by itself: cave paintings from Wikimedia Commons (only reusable licences), Egypt to the 19th century from The Met Open Access (CC0), and Vincent van Gogh from the Art Institute of Chicago (CC0). Sources, authors and licences go into `credits.csv`.
+2. **Look**: CLIP image vectors for every work.
+3. **Read**: how each work matches five ways of showing a person (symbolic, lifelike, emotional, fragmented, dissolving into light), plotted over time.
+4. **Atlas**: a UMAP map of all works.
+5. **Journey**: the machine's own piece. A DFO swarm looks at each work in time order and light flows through each work's own lines; the canvas is never cleared, so each age flows into the next.
+
+Open the notebook in Google Colab and choose Runtime → Run all.
+
 ## Carried: a riverbed of feelings
 
 > What does a machine become after carrying the feelings of many people?
