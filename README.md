@@ -29,13 +29,17 @@ Outputs: `swarm_gaze.mp4` (the moving piece), `pigment.png` (last frame), `atten
 2. **Lingering.** A swarm moves over the map using a simplified version of Dispersive Flies Optimisation (DFO). Flies stay longer where the image stands out, then lose interest (an inhibition map) and move on. Where they linger is what the machine has "noticed". A small panel shows this as a heat map.
 3. **Pigment.** Each fly releases particles that carry the colour it is looking at. Near a line, particles flow along the direction of that line; in empty space, a gentle wind carries them. They fade over time, so each artwork leaves its own moving trace of the swarm's gaze. (In the Python version; the browser version still uses only the wind.)
 
-## Carried: carrying, not imitating
+## Carried: a riverbed of feelings
 
-> Can a machine carry a human feeling, instead of imitating one?
+> What does a machine become after carrying the feelings of many people?
 
-`carried.html` gives the machine no mood of its own. A person draws one line, the way they feel right now. The machine measures that gesture (pace, unsteadiness, duration, pauses, turning, direction) and carries it through the lines of an artwork as flowing light. Near a line of the drawing, light follows the line; elsewhere it follows the gesture. The gesture's rhythm, with its pauses, keeps repeating like breath. Each new gesture can be layered on top.
+`carried.html` gives the machine no mood of its own, and it does not mirror anyone. A person draws one line, the way they feel right now. The machine measures the gesture (pace, unsteadiness, duration, pauses, direction) and adds it to a shared memory.
 
-Open `carried.html` in a browser. The page starts with an example gesture drawn by code, clearly labelled, until a person draws their own.
+- **The memory is a riverbed.** Every gesture wears a channel into it, in order; old channels slowly fade.
+- **A new gesture flows through the channels earlier gestures left.** The more gestures the machine has carried, the more of the light comes from the memory (up to 85%) and the less from any one person. The same line drawn on two different days moves differently.
+- **The memory alone** shows what the machine has become from everyone together: where it drifts, how fast it moves, how often it pauses.
+
+On claude.ai the gestures are kept in the page's shared database (no names are stored). Opened as a plain file, the page works on its own screen only. While the memory is empty, an example gesture drawn by code is shown and clearly labelled; it is never saved.
 
 ## Machine Feels: a very simple prototype
 
