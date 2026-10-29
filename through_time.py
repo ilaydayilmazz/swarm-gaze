@@ -282,31 +282,37 @@ def journey(rows, out="out_time", seconds_per_work=2.0, fps=30, size=(960, 640),
     flows along its own lines. The canvas is never cleared, so each age flows
     into the next.
     """
-    import imageio.v3 as iio
+    import imageio.v2 as imageio
     import swarm_gaze as sg
 
     sg.rng = np.random.default_rng(seed)
     Path(out).mkdir(parents=True, exist_ok=True)
     W, H = size
-    frames, canvas = [], None
+    canvas, frame, count = None, None, 0
     per = max(2, int(seconds_per_work * fps))
-    for k, r in enumerate(rows):
-        im = Image.open(r["path"]).convert("RGB")
-        im.thumbnail((W, H))
-        board = Image.new("RGB", (W, H), (0, 0, 0))
-        board.paste(im, ((W - im.width) // 2, (H - im.height) // 2))
-        rgb = np.asarray(board)
-        swarm = sg.Swarm(sg.salience_map(rgb), flies, 0.03)
-        pig = sg.Pigment(rgb, flow=1.4, decay=0.955)
-        if canvas is not None:
-            pig.canvas = canvas * 0.45  # the last age fades as the next one begins
-        for f in range(per):
-            swarm.step()
-            pig.emit(swarm)
-            pig.move()
-            frames.append(pig.frame())
-        canvas = pig.canvas
-        print(f"  {k + 1:3d}/{len(rows)}  {int(r['year']):>6}  {str(r['title'])[:50]}")
-    iio.imwrite(Path(out) / "journey.mp4", np.stack(frames), fps=fps, codec="libx264", macro_block_size=1)
-    Image.fromarray(frames[-1]).save(Path(out) / "journey_last.png")
-    print(f"Saved {out}/journey.mp4 ({len(frames) / fps:.0f} s)")
+    # frames are written straight to the video, so memory stays small however many works there are
+    writer = imageio.get_writer(str(Path(out) / "journey.mp4"), fps=fps, codec="libx264", macro_block_size=1)
+    try:
+        for k, r in enumerate(rows):
+            im = Image.open(r["path"]).convert("RGB")
+            im.thumbnail((W, H))
+            board = Image.new("RGB", (W, H), (0, 0, 0))
+            board.paste(im, ((W - im.width) // 2, (H - im.height) // 2))
+            rgb = np.asarray(board)
+            swarm = sg.Swarm(sg.salience_map(rgb), flies, 0.03)
+            pig = sg.Pigment(rgb, flow=1.4, decay=0.955)
+            if canvas is not None:
+                pig.canvas = canvas * 0.45  # the last age fades as the next one begins
+            for f in range(per):
+                swarm.step()
+                pig.emit(swarm)
+                pig.move()
+                frame = pig.frame()
+                writer.append_data(frame)
+                count += 1
+            canvas = pig.canvas
+            print(f"  {k + 1:3d}/{len(rows)}  {int(r['year']):>6}  {str(r['title'])[:50]}")
+    finally:
+        writer.close()
+    Image.fromarray(frame).save(Path(out) / "journey_last.png")
+    print(f"Saved {out}/journey.mp4 ({count / fps:.0f} s)")
