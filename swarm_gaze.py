@@ -25,7 +25,7 @@ from pathlib import Path
 
 import imageio.v3 as iio
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 DEFAULT_IMAGE = Path(__file__).parent / "assets" / "drawing.jpg"
 
@@ -64,6 +64,17 @@ def salience_map(rgb):
     sal = 0.6 * edges + 0.4 * sat
     sal = sal / (sal.max() + 1e-6)
     return sal ** 1.2
+
+
+def line_directions(rgb, blur=6):
+    """For every pixel: the direction a line runs in, and how strongly a line is nearby."""
+    img = Image.fromarray(rgb).convert("L").filter(ImageFilter.GaussianBlur(blur))
+    lum = np.asarray(img, np.float32) / 255.0
+    gy, gx = np.gradient(lum)
+    mag = np.hypot(gx, gy) + 1e-6
+    tx, ty = -gy / mag, gx / mag            # perpendicular to the gradient = along the line
+    pull = np.clip(mag / np.percentile(mag, 97), 0, 1) ** 0.7
+    return tx.astype(np.float32), ty.astype(np.float32), pull.astype(np.float32)
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +156,7 @@ class Pigment:
         self.flow = flow
         self.decay = decay
         self.canvas = np.zeros((self.h, self.w, 3), np.float32)
+        self.tx, self.ty, self.pull = line_directions(rgb)
         self.cap = capacity
         self.p = np.zeros((capacity, 2), np.float32)
         self.v = np.zeros((capacity, 2), np.float32)
@@ -173,9 +185,17 @@ class Pigment:
         alive = self.life > 0
         p, v = self.p[alive], self.v[alive]
         x, y = p[:, 0], p[:, 1]
+        # a gentle wind everywhere...
         angle = (np.sin(x * 0.006 + self.t * 0.4) + np.cos(y * 0.005 - self.t * 0.3)
                  + np.sin((x + y) * 0.0032 + self.t * 0.2)) * np.pi * 0.75
-        v = v * 0.9 + np.stack([np.cos(angle), np.sin(angle)], 1) * self.flow * 0.1
+        wind = np.stack([np.cos(angle), np.sin(angle)], 1)
+        # ...but near a line, particles follow the direction of that line
+        xi = np.clip(x.astype(int), 0, self.w - 1)
+        yi = np.clip(y.astype(int), 0, self.h - 1)
+        along = np.stack([self.tx[yi, xi], self.ty[yi, xi]], 1)
+        along *= np.sign((along * v).sum(1, keepdims=True) + 1e-6)  # keep moving forwards
+        k = self.pull[yi, xi][:, None]
+        v = v * 0.9 + (k * along + (1 - k) * wind) * self.flow * 0.1
         p = p + v
         self.p[alive], self.v[alive] = p, v
         self.life[alive] -= 1
