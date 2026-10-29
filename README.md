@@ -4,7 +4,20 @@
 
 **Swarm Gaze** is an early study in computational art. A swarm of virtual flies explores an image, lingers where something stands out, and turns its attention into flowing colour, like data pigment.
 
-It runs entirely in the browser. Open `index.html` (or the GitHub Pages link) and upload any image to watch the swarm look at it.
+The project has two versions:
+
+- **Browser (`index.html`)**: an interactive piece. Open it (or the GitHub Pages link) and upload any image to watch the swarm look at it.
+- **Python (`swarm_gaze.py`)**: the research version. It renders a video and saves the swarm's attention map for analysis.
+
+### Run the Python version
+
+```bash
+pip install -r requirements.txt
+python swarm_gaze.py                          # sample image drawn in code
+python swarm_gaze.py --image my_art.jpg --frames 600 --flies 60 --seed 7
+```
+
+Outputs: `swarm_gaze.mp4` (the moving piece), `pigment.png` (last frame), `attention.png` (heat map of where the swarm lingered) and `attention.npy` (the raw attention grid).
 
 ## How it works
 
