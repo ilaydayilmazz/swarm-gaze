@@ -29,6 +29,14 @@ Outputs: `swarm_gaze.mp4` (the moving piece), `pigment.png` (last frame), `atten
 2. **Lingering.** A swarm moves over the map using a simplified version of Dispersive Flies Optimisation (DFO). Flies stay longer where the image stands out, then lose interest (an inhibition map) and move on. Where they linger is what the machine has "noticed". A small panel shows this as a heat map.
 3. **Pigment.** Each fly releases particles that carry the colour it is looking at. Near a line, particles flow along the direction of that line; in empty space, a gentle wind carries them. They fade over time, so each artwork leaves its own moving trace of the swarm's gaze. (In the Python version; the browser version still uses only the wind.)
 
+## Carried: carrying, not imitating
+
+> Can a machine carry a human feeling, instead of imitating one?
+
+`carried.html` gives the machine no mood of its own. A person draws one line, the way they feel right now. The machine measures that gesture (pace, unsteadiness, duration, pauses, turning, direction) and carries it through the lines of an artwork as flowing light. Near a line of the drawing, light follows the line; elsewhere it follows the gesture. The gesture's rhythm, with its pauses, keeps repeating like breath. Each new gesture can be layered on top.
+
+Open `carried.html` in a browser. The page starts with an example gesture drawn by code, clearly labelled, until a person draws their own.
+
 ## Machine Feels: a very simple prototype
 
 > If a machine learns what people feel in front of art, what would it draw?
