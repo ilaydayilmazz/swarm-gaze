@@ -4,6 +4,10 @@
 
 **Swarm Gaze** is an early study in computational art. A swarm of virtual flies explores an image, lingers where something stands out, and turns its attention into flowing colour, like data pigment.
 
+| The swarm's attention on my drawing | Its gaze as data pigment |
+| --- | --- |
+| ![Where the swarm lingered on my drawing](docs/attention.png) | ![The swarm's gaze as flowing pigment](docs/pigment.png) |
+
 The project has two versions:
 
 - **Browser (`index.html`)**: an interactive piece. Open it (or the GitHub Pages link) and upload any image to watch the swarm look at it.
@@ -13,7 +17,7 @@ The project has two versions:
 
 ```bash
 pip install -r requirements.txt
-python swarm_gaze.py                          # sample image drawn in code
+python swarm_gaze.py                          # uses my drawing in assets/drawing.jpg
 python swarm_gaze.py --image my_art.jpg --frames 600 --flies 60 --seed 7
 ```
 
@@ -51,4 +55,4 @@ Outputs: `swarm_gaze.mp4` (the moving piece), `pigment.png` (last frame), `atten
 Prototype by İlayda Yılmaz, MSc Data Science, University of Greenwich, October 2026.
 Built with the help of an AI coding assistant.
 
-The sample image is generated in code. Images you upload stay in your browser and are never sent anywhere.
+The default image (`assets/drawing.jpg`) is my own ink drawing. Images you upload in the browser stay in your browser and are never sent anywhere.

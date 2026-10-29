@@ -15,15 +15,19 @@ Outputs:
   - attention.npy    the raw attention grid, for analysis
 
 Usage:
-  python swarm_gaze.py                      # uses a sample image drawn in code
+  python swarm_gaze.py                      # uses my drawing in assets/drawing.jpg
   python swarm_gaze.py --image my_art.jpg --frames 600 --flies 60
 """
 
 import argparse
 
+from pathlib import Path
+
 import imageio.v3 as iio
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image
+
+DEFAULT_IMAGE = Path(__file__).parent / "assets" / "drawing.jpg"
 
 rng = np.random.default_rng()
 
@@ -32,62 +36,10 @@ rng = np.random.default_rng()
 # 1. The image
 # ---------------------------------------------------------------------------
 
-def sample_image(w=800, h=560):
-    """A sunset skyline with domes, minarets and birds, drawn in code."""
-    img = Image.new("RGB", (w, h))
-    d = ImageDraw.Draw(img)
-
-    # sky gradient: deep blue -> purple -> red -> orange
-    stops = [(0.0, (27, 31, 94)), (0.45, (123, 45, 139)), (0.8, (226, 89, 79)), (1.0, (247, 165, 65))]
-    horizon = 340
-    for y in range(horizon):
-        t = y / horizon
-        for (t0, c0), (t1, c1) in zip(stops, stops[1:]):
-            if t0 <= t <= t1:
-                k = (t - t0) / (t1 - t0)
-                col = tuple(int(a + (b - a) * k) for a, b in zip(c0, c1))
-                d.line([(0, y), (w, y)], fill=col)
-                break
-
-    # sun with a soft glow
-    glow = Image.new("RGB", (w, h))
-    ImageDraw.Draw(glow).ellipse([440, 180, 680, 420], fill=(255, 170, 70))
-    glow = glow.filter(ImageFilter.GaussianBlur(60))
-    img = Image.fromarray(np.clip(np.asarray(img, int) + np.asarray(glow, int) * 0.6, 0, 255).astype(np.uint8))
-    d = ImageDraw.Draw(img)
-    d.ellipse([502, 242, 618, 358], fill=(255, 211, 107))
-
-    # sea with reflections of the sun
-    for y in range(horizon, h):
-        k = (y - horizon) / (h - horizon)
-        d.line([(0, y), (w, y)], fill=(int(19 - 12 * k), int(88 - 62 * k), int(107 - 63 * k)))
-    for k in range(40):
-        y = 352 + k * 5
-        half = (30 + rng.random() * 90 * (1 - k / 50)) / 2
-        x = 560 + (rng.random() - 0.5) * 40
-        d.rectangle([x - half, y, x + half, y + 1], fill=(255, 190, 90))
-
-    # skyline: domes and minarets
-    sil = (42, 18, 56)
-    d.rectangle([0, 300, 400, 345], fill=sil)
-    for x, y, r in [(90, 300, 40), (190, 290, 60), (300, 298, 44), (160, 262, 26), (230, 258, 28)]:
-        d.pieslice([x - r, y - r, x + r, y + r], 180, 360, fill=sil)
-    for x, top in [(60, 170), (320, 160), (130, 210), (260, 200)]:
-        d.rectangle([x - 4, top, x + 4, 300], fill=sil)
-        d.polygon([(x - 6, top), (x, top - 26), (x + 6, top)], fill=sil)
-        d.rectangle([x - 7, top + 40, x + 7, top + 44], fill=sil)
-
-    # a few birds
-    for x, y, s in [(420, 120, 14), (455, 100, 10), (480, 135, 12), (380, 90, 9), (510, 110, 8)]:
-        d.line([(x - s, y - s * 0.4), (x, y), (x + s, y - s * 0.4)], fill=(26, 15, 42), width=3)
-
-    return img
-
-
 def load_image(path, max_side=800):
     img = Image.open(path).convert("RGB")
-    scale = max_side / max(img.size)
-    if scale < 1:
+    scale = min(max_side / max(img.size), 2.0)  # shrink big images, enlarge small ones (up to 2x)
+    if scale != 1:
         img = img.resize((round(img.width * scale), round(img.height * scale)), Image.LANCZOS)
     return img
 
@@ -263,7 +215,7 @@ def attention_image(img, swarm):
 
 def main():
     ap = argparse.ArgumentParser(description="Swarm Gaze: a swarm's attention as data pigment")
-    ap.add_argument("--image", help="path to an image (default: sample drawn in code)")
+    ap.add_argument("--image", default=str(DEFAULT_IMAGE), help="path to an image (default: assets/drawing.jpg)")
     ap.add_argument("--frames", type=int, default=600)
     ap.add_argument("--flies", type=int, default=60)
     ap.add_argument("--disturbance", type=float, default=0.03)
@@ -276,7 +228,7 @@ def main():
     global rng
     rng = np.random.default_rng(args.seed)
 
-    img = load_image(args.image) if args.image else sample_image()
+    img = load_image(args.image)
     w, h = img.width - img.width % 2, img.height - img.height % 2  # video needs even sizes
     img = img.crop((0, 0, w, h))
     rgb = np.asarray(img)
