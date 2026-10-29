@@ -29,6 +29,29 @@ Outputs: `swarm_gaze.mp4` (the moving piece), `pigment.png` (last frame), `atten
 2. **Lingering.** A swarm moves over the map using a simplified version of Dispersive Flies Optimisation (DFO). Flies stay longer where the image stands out, then lose interest (an inhibition map) and move on. Where they linger is what the machine has "noticed". A small panel shows this as a heat map.
 3. **Pigment.** Each fly releases particles that carry the colour it is looking at. Near a line, particles flow along the direction of that line; in empty space, a gentle wind carries them. They fade over time, so each artwork leaves its own moving trace of the swarm's gaze. (In the Python version; the browser version still uses only the wind.)
 
+## Bee Gaze: learning from an artist
+
+`bee_gaze.py` adds learning and a second swarm from nature.
+
+1. **Collect**: downloads ~100 public-domain (CC0) works by one artist from The Met Open Access API. Default: Katsushika Hokusai.
+2. **Learn**: cuts every work into small patches and clusters them (PCA + k-means) into a vocabulary of 64 marks. Rarer marks count as more "signature".
+3. **Look**: scores each region of a target image by how much it resembles those signature marks. Empty paper has no nectar.
+4. **Forage**: an Artificial Bee Colony (employed, onlooker and scout bees) searches that map. Nectar is used up where bees feed and slowly regrows.
+5. **Paint**: every feeding leaves one learned mark, so the bees build a new image from what the machine learned.
+6. **Humans** (planned): compare the bees' visits with real human responses. Not implemented yet; no human data is simulated.
+
+Run it in Google Colab with `bee_gaze_colab.ipynb`, or locally:
+
+```bash
+pip install -r requirements.txt scikit-learn requests
+python bee_gaze.py collect --artist "Katsushika Hokusai" --n 100
+python bee_gaze.py run --target assets/drawing.jpg
+```
+
+Outputs in `out/`: the learned vocabulary, the learned attention map, the bees' visit map, the bees' painting, a video of the painting being made, and `bee_visits.npy` for analysis.
+
+Reference: Karaboga, D. (2005). *An idea based on honey bee swarm for numerical optimization*. Technical Report TR06, Erciyes University.
+
 ## Controls
 
 | Control | Effect |
